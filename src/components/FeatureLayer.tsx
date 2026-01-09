@@ -23,7 +23,7 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
   const lineStringPointsRef = React.useRef<[number, number][]>([]);
   const handlersRef = React.useRef<{
     click?: (e: L.LeafletMouseEvent) => void;
-    dblclick?: () => void;
+    dblclick?: (e: L.LeafletMouseEvent) => void;
     mousedown?: (e: L.LeafletMouseEvent) => void;
     mousemove?: (e: L.LeafletMouseEvent) => void;
     mouseup?: (e: L.LeafletMouseEvent) => void;
@@ -125,6 +125,7 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
       }
 
       const clickHandler = (e: L.LeafletMouseEvent) => {
+        e.originalEvent.stopPropagation();
         const point: [number, number] = [e.latlng.lat, e.latlng.lng];
         
         if (!isDrawing) {
@@ -152,7 +153,9 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
-      const dblClickHandler = () => {
+      const dblClickHandler = (e: L.LeafletMouseEvent) => {
+        e.originalEvent.stopPropagation();
+        e.originalEvent.preventDefault();
         if (polygonPointsRef.current.length >= 3) {
           const points = polygonPointsRef.current;
           const polygon = {
@@ -182,6 +185,8 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
 
       handlersRef.current.click = clickHandler;
       handlersRef.current.dblclick = dblClickHandler;
+      
+      // Attach event handlers
       map.on('click', clickHandler);
       map.on('dblclick', dblClickHandler);
     }
@@ -255,6 +260,7 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
       handlersRef.current.mousedown = mouseDownHandler;
       handlersRef.current.mousemove = mouseMoveHandler;
       handlersRef.current.mouseup = mouseUpHandler;
+      
       map.on('mousedown', mouseDownHandler);
       map.on('mousemove', mouseMoveHandler);
       map.on('mouseup', mouseUpHandler);
@@ -331,6 +337,7 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
       handlersRef.current.mousedown = mouseDownHandler;
       handlersRef.current.mousemove = mouseMoveHandler;
       handlersRef.current.mouseup = mouseUpHandler;
+      
       map.on('mousedown', mouseDownHandler);
       map.on('mousemove', mouseMoveHandler);
       map.on('mouseup', mouseUpHandler);
@@ -342,6 +349,7 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
       }
 
       const clickHandler = (e: L.LeafletMouseEvent) => {
+        e.originalEvent.stopPropagation();
         const point: [number, number] = [e.latlng.lng, e.latlng.lat];
         
         if (!isDrawing) {
@@ -366,7 +374,9 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
-      const dblClickHandler = () => {
+      const dblClickHandler = (e: L.LeafletMouseEvent) => {
+        e.originalEvent.stopPropagation();
+        e.originalEvent.preventDefault();
         if (lineStringPointsRef.current.length >= 2) {
           const points = lineStringPointsRef.current;
           const lineString = {
@@ -396,8 +406,11 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
 
       handlersRef.current.click = clickHandler;
       handlersRef.current.dblclick = dblClickHandler;
-      map.on('click', clickHandler);
-      map.on('dblclick', dblClickHandler);
+      
+      map.whenReady(() => {
+        map.on('click', clickHandler);
+        map.on('dblclick', dblClickHandler);
+      });
     }
 
     return cleanup;

@@ -52,6 +52,7 @@ export const Map: React.FC<MapProps> = ({ features, onFeatureAdd }) => {
       zoom={13}
       style={{ height: '100%', width: '100%' }}
       zoomControl={true}
+      doubleClickZoom={false}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
