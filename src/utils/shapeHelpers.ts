@@ -1,5 +1,8 @@
-import * as turf from '@turf/turf';
-import { Polygon, LineString, Point } from 'geojson';
+// @ts-expect-error - Turf.js types have module resolution issues
+import { circle as createCircleTurf } from '@turf/turf';
+// @ts-expect-error - Turf.js types have module resolution issues
+import { distance as calculateDistanceTurf } from '@turf/turf';
+import { Polygon, LineString } from 'geojson';
 import { DrawingFeature, FeatureType } from '../types';
 
 /**
@@ -45,8 +48,8 @@ export const createCircle = (
   center: [number, number],
   radiusKm: number
 ): Polygon => {
-  const circle = turf.circle(center, radiusKm, { units: 'kilometers' });
-  return circle.geometry as Polygon;
+  const circleGeom = createCircleTurf(center, radiusKm, { units: 'kilometers' });
+  return circleGeom.geometry as Polygon;
 };
 
 /**
@@ -74,6 +77,6 @@ export const calculateDistance = (
   point1: [number, number],
   point2: [number, number]
 ): number => {
-  return turf.distance(point1, point2, { units: 'kilometers' });
+  return calculateDistanceTurf(point1, point2, { units: 'kilometers' });
 };
 

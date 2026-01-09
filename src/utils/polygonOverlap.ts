@@ -1,5 +1,6 @@
-import * as turf from '@turf/turf';
-import { Feature, Polygon, MultiPolygon } from 'geojson';
+// @ts-expect-error - Turf.js types have module resolution issues
+import { booleanIntersects, booleanContains, difference } from '@turf/turf';
+import { Polygon } from 'geojson';
 import { DrawingFeature } from '../types';
 
 /**
@@ -23,7 +24,7 @@ export const findOverlappingPolygon = (
     }
 
     // Check if geometries intersect
-    if (turf.booleanIntersects(newFeature, existing)) {
+    if (booleanIntersects(newFeature, existing)) {
       return existing;
     }
   }
@@ -39,7 +40,7 @@ export const isFullyEnclosed = (
   innerFeature: DrawingFeature
 ): boolean => {
   try {
-    return turf.booleanContains(outerFeature, innerFeature);
+    return booleanContains(outerFeature, innerFeature);
   } catch {
     return false;
   }
@@ -55,21 +56,21 @@ export const trimOverlappingPolygon = (
 ): DrawingFeature | null => {
   try {
     // Calculate difference: newFeature - overlappingFeature
-    const difference = turf.difference(
+    const diffResult = difference(
       newFeature.geometry as Polygon,
       overlappingFeature.geometry as Polygon
     );
 
-    if (!difference || difference.geometry.type === 'GeometryCollection') {
+    if (!diffResult || diffResult.geometry.type === 'GeometryCollection') {
       // If difference results in empty or collection, return null
       return null;
     }
 
     // Ensure we have a valid polygon
-    if (difference.geometry.type === 'Polygon' || difference.geometry.type === 'MultiPolygon') {
+    if (diffResult.geometry.type === 'Polygon' || diffResult.geometry.type === 'MultiPolygon') {
       return {
         ...newFeature,
-        geometry: difference.geometry,
+        geometry: diffResult.geometry,
       } as DrawingFeature;
     }
 

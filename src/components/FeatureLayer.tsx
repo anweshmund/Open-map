@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
+// @ts-expect-error - Turf.js types have module resolution issues
+import { distance, circle } from '@turf/turf';
 import { DrawingFeature } from '../types';
 import { useMapContext } from '../context/MapContext';
 import { generateFeatureId } from '../utils/shapeHelpers';
@@ -19,6 +21,13 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
   const circleRadiusRef = React.useRef<number>(0);
   const polygonPointsRef = React.useRef<[number, number][]>([]);
   const lineStringPointsRef = React.useRef<[number, number][]>([]);
+  const handlersRef = React.useRef<{
+    click?: (e: L.LeafletMouseEvent) => void;
+    dblclick?: () => void;
+    mousedown?: (e: L.LeafletMouseEvent) => void;
+    mousemove?: (e: L.LeafletMouseEvent) => void;
+    mouseup?: (e: L.LeafletMouseEvent) => void;
+  }>({});
 
   // Color scheme for different feature types
   const getFeatureStyle = (type: string) => {
@@ -70,46 +79,57 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
 
   // Handle drawing interactions
   useEffect(() => {
-    if (!activeTool) {
-      // Clean up drawing layer
+    // Cleanup function
+    const cleanup = () => {
+      // Remove all event handlers
+      if (handlersRef.current.click) {
+        map.off('click', handlersRef.current.click);
+      }
+      if (handlersRef.current.dblclick) {
+        map.off('dblclick', handlersRef.current.dblclick);
+      }
+      if (handlersRef.current.mousedown) {
+        map.off('mousedown', handlersRef.current.mousedown);
+      }
+      if (handlersRef.current.mousemove) {
+        map.off('mousemove', handlersRef.current.mousemove);
+      }
+      if (handlersRef.current.mouseup) {
+        map.off('mouseup', handlersRef.current.mouseup);
+      }
+      
+      // Clear drawing layer
       if (drawingLayerRef.current) {
         map.removeLayer(drawingLayerRef.current);
         drawingLayerRef.current = null;
       }
+      
+      // Reset handlers
+      handlersRef.current = {};
+    };
+
+    if (!activeTool) {
+      cleanup();
       startPointRef.current = null;
       polygonPointsRef.current = [];
       lineStringPointsRef.current = [];
-      return;
+      circleRadiusRef.current = 0;
+      return cleanup;
     }
 
-    let mouseMoveHandler: ((e: L.LeafletMouseEvent) => void) | null = null;
-    let clickHandler: ((e: L.LeafletMouseEvent) => void) | null = null;
-    let mouseDownHandler: ((e: L.LeafletMouseEvent) => void) | null = null;
-    let mouseUpHandler: ((e: L.LeafletMouseEvent) => void) | null = null;
-
-    let dblClickHandler: (() => void) | null = null;
-
-    const cleanup = () => {
-      if (mouseMoveHandler) map.off('mousemove', mouseMoveHandler);
-      if (clickHandler) map.off('click', clickHandler);
-      if (mouseDownHandler) map.off('mousedown', mouseDownHandler);
-      if (mouseUpHandler) map.off('mouseup', mouseUpHandler);
-      if (dblClickHandler) map.off('dblclick', dblClickHandler);
-      if (drawingLayerRef.current) {
-        map.removeLayer(drawingLayerRef.current);
-        drawingLayerRef.current = null;
-      }
-    };
-
+    // Polygon drawing
     if (activeTool === 'polygon') {
-      polygonPointsRef.current = [];
+      // Reset points when starting new polygon
+      if (!isDrawing) {
+        polygonPointsRef.current = [];
+      }
 
-      clickHandler = (e: L.LeafletMouseEvent) => {
+      const clickHandler = (e: L.LeafletMouseEvent) => {
         const point: [number, number] = [e.latlng.lat, e.latlng.lng];
         
         if (!isDrawing) {
           setDrawingState(true, null);
-          polygonPointsRef.current = []; // Reset points
+          polygonPointsRef.current = [];
         }
         
         polygonPointsRef.current.push(point);
@@ -121,7 +141,6 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
 
         if (polygonPointsRef.current.length >= 2) {
           const latlngs = polygonPointsRef.current.map(([lat, lng]) => [lat, lng] as [number, number]);
-          // Close the polygon for preview
           const closedPoints = [...latlngs, latlngs[0]];
           drawingLayerRef.current = L.polygon(closedPoints, {
             color: '#3388ff',
@@ -133,13 +152,12 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
-      // Double click to finish polygon
-      dblClickHandler = () => {
+      const dblClickHandler = () => {
         if (polygonPointsRef.current.length >= 3) {
           const points = polygonPointsRef.current;
           const polygon = {
             type: 'Polygon' as const,
-            coordinates: [[...points.map(([lat, lng]) => [lng, lat]), [points[0][1], points[0][0]]]], // Close polygon
+            coordinates: [[...points.map(([lat, lng]) => [lng, lat]), [points[0][1], points[0][0]]]],
           };
           const feature: DrawingFeature = {
             type: 'Feature',
@@ -162,15 +180,19 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
+      handlersRef.current.click = clickHandler;
+      handlersRef.current.dblclick = dblClickHandler;
       map.on('click', clickHandler);
       map.on('dblclick', dblClickHandler);
-    } else if (activeTool === 'rectangle') {
-      mouseDownHandler = (e: L.LeafletMouseEvent) => {
+    }
+    // Rectangle drawing
+    else if (activeTool === 'rectangle') {
+      const mouseDownHandler = (e: L.LeafletMouseEvent) => {
         startPointRef.current = [e.latlng.lng, e.latlng.lat];
         setDrawingState(true, null);
       };
 
-      mouseMoveHandler = (e: L.LeafletMouseEvent) => {
+      const mouseMoveHandler = (e: L.LeafletMouseEvent) => {
         if (startPointRef.current) {
           const endPoint: [number, number] = [e.latlng.lng, e.latlng.lat];
           
@@ -196,7 +218,7 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
-      mouseUpHandler = (e: L.LeafletMouseEvent) => {
+      const mouseUpHandler = (e: L.LeafletMouseEvent) => {
         if (startPointRef.current) {
           const endPoint: [number, number] = [e.latlng.lng, e.latlng.lat];
           const rectangle = {
@@ -230,97 +252,101 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
+      handlersRef.current.mousedown = mouseDownHandler;
+      handlersRef.current.mousemove = mouseMoveHandler;
+      handlersRef.current.mouseup = mouseUpHandler;
       map.on('mousedown', mouseDownHandler);
       map.on('mousemove', mouseMoveHandler);
       map.on('mouseup', mouseUpHandler);
-    } else if (activeTool === 'circle') {
-      mouseDownHandler = (e: L.LeafletMouseEvent) => {
+    }
+    // Circle drawing
+    else if (activeTool === 'circle') {
+      const mouseDownHandler = (e: L.LeafletMouseEvent) => {
         startPointRef.current = [e.latlng.lng, e.latlng.lat];
         setDrawingState(true, null);
       };
 
-      mouseMoveHandler = (e: L.LeafletMouseEvent) => {
+      const mouseMoveHandler = (e: L.LeafletMouseEvent) => {
         if (startPointRef.current) {
-          // Use proper distance calculation
-          import('@turf/turf').then((turf) => {
-            const distance = turf.distance(
-              startPointRef.current!,
-              [e.latlng.lng, e.latlng.lat],
-              { units: 'kilometers' }
-            );
-            circleRadiusRef.current = distance;
+          const dist = distance(
+            startPointRef.current,
+            [e.latlng.lng, e.latlng.lat],
+            { units: 'kilometers' }
+          );
+          circleRadiusRef.current = dist;
 
-            // Create circle preview
-            if (circleRadiusRef.current > 0) {
-              if (drawingLayerRef.current) {
-                map.removeLayer(drawingLayerRef.current);
-              }
-              const circle = turf.circle(
-                startPointRef.current!,
-                circleRadiusRef.current,
-                { units: 'kilometers', steps: 64 }
-              );
-              const latlngs = circle.geometry.coordinates[0].map(
-                ([lng, lat]: [number, number]) => [lat, lng] as [number, number]
-              );
-              if (drawingLayerRef.current) {
-                map.removeLayer(drawingLayerRef.current);
-              }
-              drawingLayerRef.current = L.polygon(latlngs, {
-                color: '#28a745',
-                fillColor: '#28a745',
-                fillOpacity: 0.2,
-                weight: 2,
-                dashArray: '5, 5',
-              }).addTo(map);
-            }
-          });
-        }
-      };
+          if (drawingLayerRef.current) {
+            map.removeLayer(drawingLayerRef.current);
+          }
 
-      mouseUpHandler = (e: L.LeafletMouseEvent) => {
-        if (startPointRef.current && circleRadiusRef.current > 0) {
-          import('@turf/turf').then((turf) => {
-            const circle = turf.circle(
-              startPointRef.current!,
+          if (circleRadiusRef.current > 0) {
+            const circleGeom = circle(
+              startPointRef.current,
               circleRadiusRef.current,
               { units: 'kilometers', steps: 64 }
             );
-            const feature: DrawingFeature = {
-              type: 'Feature',
-              geometry: circle.geometry as import('geojson').Polygon,
-              properties: {
-                type: 'circle',
-                id: generateFeatureId(),
-                createdAt: Date.now(),
-              },
-            };
-            const result = addFeature(feature);
-            if (result.success) {
-              onFeatureAdd(feature);
-            } else {
-              alert(result.error || 'Failed to add feature');
-            }
-            startPointRef.current = null;
-            circleRadiusRef.current = 0;
-            cleanup();
-            setDrawingState(false, null);
-          });
+            const latlngs = circleGeom.geometry.coordinates[0].map(
+              ([lng, lat]: [number, number]) => [lat, lng] as [number, number]
+            );
+            drawingLayerRef.current = L.polygon(latlngs, {
+              color: '#28a745',
+              fillColor: '#28a745',
+              fillOpacity: 0.2,
+              weight: 2,
+              dashArray: '5, 5',
+            }).addTo(map);
+          }
         }
       };
 
+      const mouseUpHandler = () => {
+        if (startPointRef.current && circleRadiusRef.current > 0) {
+          const circleGeom = circle(
+            startPointRef.current,
+            circleRadiusRef.current,
+            { units: 'kilometers', steps: 64 }
+          );
+          const feature: DrawingFeature = {
+            type: 'Feature',
+            geometry: circleGeom.geometry as import('geojson').Polygon,
+            properties: {
+              type: 'circle',
+              id: generateFeatureId(),
+              createdAt: Date.now(),
+            },
+          };
+          const result = addFeature(feature);
+          if (result.success) {
+            onFeatureAdd(feature);
+          } else {
+            alert(result.error || 'Failed to add feature');
+          }
+          startPointRef.current = null;
+          circleRadiusRef.current = 0;
+          cleanup();
+          setDrawingState(false, null);
+        }
+      };
+
+      handlersRef.current.mousedown = mouseDownHandler;
+      handlersRef.current.mousemove = mouseMoveHandler;
+      handlersRef.current.mouseup = mouseUpHandler;
       map.on('mousedown', mouseDownHandler);
       map.on('mousemove', mouseMoveHandler);
       map.on('mouseup', mouseUpHandler);
-    } else if (activeTool === 'lineString') {
-      lineStringPointsRef.current = [];
+    }
+    // LineString drawing
+    else if (activeTool === 'lineString') {
+      if (!isDrawing) {
+        lineStringPointsRef.current = [];
+      }
 
-      clickHandler = (e: L.LeafletMouseEvent) => {
+      const clickHandler = (e: L.LeafletMouseEvent) => {
         const point: [number, number] = [e.latlng.lng, e.latlng.lat];
         
         if (!isDrawing) {
           setDrawingState(true, null);
-          lineStringPointsRef.current = []; // Reset points
+          lineStringPointsRef.current = [];
         }
         
         lineStringPointsRef.current.push(point);
@@ -340,8 +366,7 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
-      // Double click to finish line string
-      dblClickHandler = () => {
+      const dblClickHandler = () => {
         if (lineStringPointsRef.current.length >= 2) {
           const points = lineStringPointsRef.current;
           const lineString = {
@@ -369,6 +394,8 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
         }
       };
 
+      handlersRef.current.click = clickHandler;
+      handlersRef.current.dblclick = dblClickHandler;
       map.on('click', clickHandler);
       map.on('dblclick', dblClickHandler);
     }
@@ -378,4 +405,3 @@ export const FeatureLayer: React.FC<FeatureLayerProps> = ({ features, onFeatureA
 
   return null;
 };
-

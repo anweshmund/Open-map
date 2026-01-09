@@ -5,7 +5,7 @@ import { Toolbar } from './components/Toolbar';
 import './App.css';
 
 const AppContent: React.FC = () => {
-  const { features, addFeature } = useMapContext();
+  const { features } = useMapContext();
 
   const handleFeatureAdd = (feature: ReturnType<typeof useMapContext>['features'][0]) => {
     // Feature is already added in the context, this is just for map updates
